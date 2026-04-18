@@ -1,0 +1,9 @@
+{
+  "status": "VALID",
+  "patient_id": "001",
+  "modality": "MRI",
+  "study_date": "20230101",
+  "issues": [],
+  "quality_flag": "GOOD",
+  "cleaned_summary": "Patient 001 | MRI | 20230101"
+}

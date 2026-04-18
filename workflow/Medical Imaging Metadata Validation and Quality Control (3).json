@@ -1,0 +1,95 @@
+{
+  "name": "Medical Imaging Metadata Validation and Quality Control",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "medical-imaging-validation",
+        "options": {}
+      },
+      "id": "091c322e-ac46-4acd-b42e-cae89fdf748c",
+      "name": "Receive Medical Imaging Metadata",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        368,
+        304
+      ],
+      "webhookId": "3181157e-2b6e-485d-8bf6-4513bb43e8f0"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\n// supports multiple webhook formats\nconst input =\n  data.allRecords?.[0]?.body ||\n  data.body ||\n  data;\n\n// fallback safety\nif (!input) {\n  throw new Error(\"No input received\");\n}\n\n// If it's already a single record → wrap it into array\nconst records = Array.isArray(input)\n  ? input\n  : [input];\n\nconst allowedModalities = ['MRI', 'CT', 'PET', 'XRAY'];\nconst results = [];\nconst seenRecords = new Map();\n\nfor (const record of records) {\n  const issues = [];\n  let status = 'VALID';\n  let qualityFlag = 'GOOD';\n\n  // Required fields\n  if (!record.patient_id) {\n    issues.push('Missing required field: patient_id');\n    status = 'INVALID';\n  }\n  if (!record.study_date) {\n    issues.push('Missing required field: study_date');\n    status = 'INVALID';\n  }\n  if (!record.modality) {\n    issues.push('Missing required field: modality');\n    status = 'INVALID';\n  }\n\n  // Validate date\n  if (record.study_date) {\n    const dateStr = String(record.study_date);\n    const regex = /^\\d{8}$/;\n\n    if (!regex.test(dateStr)) {\n      issues.push('study_date must be YYYYMMDD');\n      status = 'INVALID';\n    } else {\n      const year = +dateStr.slice(0,4);\n      const month = +dateStr.slice(4,6);\n      const day = +dateStr.slice(6,8);\n\n      const studyDate = new Date(year, month - 1, day);\n      const today = new Date();\n      today.setHours(0,0,0,0);\n\n      if (studyDate > today) {\n        issues.push('study_date cannot be in future');\n        status = 'INVALID';\n      }\n    }\n  }\n\n  // Modality check\n  if (record.modality && !allowedModalities.includes(record.modality)) {\n    issues.push('Invalid modality');\n    status = 'INVALID';\n  }\n\n  // Duplicate check\n  if (record.patient_id && record.study_date) {\n    const key = `${record.patient_id}_${record.study_date}`;\n\n    if (seenRecords.has(key)) {\n      issues.push('Duplicate record');\n      status = 'WARNING';\n      qualityFlag = 'DUPLICATE';\n    } else {\n      seenRecords.set(key, true);\n    }\n  }\n\n  if (status === 'INVALID') {\n    qualityFlag = 'BAD';\n  }\n\n  const cleanedSummary =\n    `Patient ${record.patient_id || 'UNKNOWN'} | ${record.modality || 'UNKNOWN'} | ${record.study_date || 'UNKNOWN'}`;\n\n  results.push({\n    status,\n    issues,\n    cleaned_summary: cleanedSummary,\n    patient_id: record.patient_id || null,\n    modality: record.modality || null,\n    quality_flag: qualityFlag\n  });\n}\n\nreturn results.map(r => ({ json: r }));"
+      },
+      "id": "63312d4e-22d8-4f4e-912d-a8528c1c759c",
+      "name": "Validate All Records",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "your@email.com",
+        "subject": "NeuroClean AI - Validation Result",
+        "emailType": "text",
+        "message": "=Patient ID: {{$json.patient_id}}\nStatus: {{$json.status}}\nIssues: {{$json.issues}}\nSummary: {{$json.cleaned_summary}}\nQuality: {{$json.quality_flag}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1360,
+        304
+      ],
+      "id": "8f5132e6-2cdd-4a36-a85c-c9cc080c0800",
+      "name": "Send a message",
+      "webhookId": "3d9847b2-71e9-470d-b433-cad81e81aca0",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "efZvaxTwbh1fBWTu",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Medical Imaging Metadata": {
+      "main": [
+        [
+          {
+            "node": "Validate All Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate All Records": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "d807873d-4c53-4afa-8fdf-e4f8d9a37814",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8d7e2a2698654fa0e8fbacec94ace86fa2bb9e8a7261b2e6220bab1d274fd8a7"
+  },
+  "id": "IS0X1iCF37daNABs",
+  "tags": []
+}
